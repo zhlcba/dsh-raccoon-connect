@@ -2,9 +2,51 @@
 
 [中文](./README.md) | English
 
-Bring the models bundled in the **SenseTime 小浣熊** (XiaoHuanXiong) desktop app — GLM-5.3, GLM-5.3-Flash, Kimi-K3, SenseNova-6.8-Flash-Lite, DeepSeek-V4.1-Flash and whatever else your account is served — into DeepSeek Harness, with zero configuration.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![DSH kernel](https://img.shields.io/badge/DSH-0.2.1--rc.1%20~%200.2.x-2f6f4f.svg)](#install-and-version-mapping)
+[![tests](https://img.shields.io/badge/tests-176%20passing-4b6fff.svg)](./CHANGELOG.md)
+[![npm](https://img.shields.io/npm/v/dsh-raccoon-connect?color=cb3837)](https://www.npmjs.com/package/dsh-raccoon-connect)
 
+Bring the models bundled in the **SenseTime 小浣熊** (XiaoHuanXiong) desktop app — GLM-5.3, GLM-5.3-Flash, Kimi-K3, SenseNova-6.8-Flash-Lite, DeepSeek-V4.1-Flash and whatever else your account is served — into DeepSeek Harness. Pick them in the model selector and talk: **no API key to paste.** The plugin reuses the desktop app's stored sign-in and follows account switches automatically.
+
+> ### This is a fork: it adds DSH 0.2.x support
+>
+> The upstream [liudapeng0311/dsh-raccoon-work](https://github.com/liudapeng0311/dsh-raccoon-work) declares support for `0.1.5-rc.1` only. On a DSH 0.2.x kernel the compatibility check **rejects it outright** — it cannot be installed. This fork adds the 0.2.x adaptation and has been verified on Windows + Desktop profile + `0.2.1-rc.2` (model group appears, chat works).
+>
+> **Nothing but the kernel adaptation was changed** — upstream protocol, token semantics, rate arithmetic, vision verdicts and probe logic are untouched. All 176 upstream tests pass. See [CHANGELOG.md](./CHANGELOG.md) for the itemised diff.
+>
 > The plugin skeleton follows [corrinehu/dsh-workbuddy-connect](https://github.com/corrinehu/dsh-workbuddy-connect) (MIT). The upstream protocol, token semantics, rate arithmetic and probe verdicts were rewritten against the **measured** behaviour of the 小浣熊 gateway; see `docs/upstream-protocol.md`.
+
+## Quick start
+
+Requirement: the 小浣熊 desktop app installed **and signed in**. The plugin does not launch it and does not log in on your behalf.
+
+```sh
+# 1) Install (Desktop profile; use `web` on a Web profile)
+dsh plugin --profile desktop add dsh-raccoon-connect
+# or straight from GitHub:
+# dsh plugin --profile desktop add github:zhlcba/dsh-raccoon-connect
+
+# 2) Fully quit DSH (tray included) and start it again
+
+# 3) Pick a model from the 商汤小浣熊 group and talk
+```
+
+No second sign-in: the plugin reads the credential file the desktop app already writes for its local agent.
+
+## FAQ
+
+**Does the desktop app have to stay running?**
+No. The plugin reads a credential **file** (`~/.box-agent/config/auth.json`), not a live process. As long as the app has signed in once and the credential is still valid, it works with the app closed. You only need the app for: first sign-in, a revoked/expired credential, or an account switch.
+
+**Which DSH versions are supported?**
+This fork supports `0.2.1-rc.1` – `0.2.x` (verified on `0.2.1-rc.2`). For upstream's 0.1.x line use the [upstream repo](https://github.com/liudapeng0311/dsh-raccoon-work). Installing the wrong generation is refused by DSH's compatibility check — that is a guard, not a bug.
+
+**Will it spend my credit?**
+Yes — your own 小浣熊 account's credit. The plugin only forwards requests locally; it does not proxy, does not upload your data, and credentials never leave the machine. Respect SenseTime's terms of service; see the disclaimer at the end.
+
+**No model group after installing?**
+Check in order: ① has the desktop app ever signed in (`~/.box-agent/config/auth.json` present)? ② did DSH fully restart? ③ run `dsh plugin --profile desktop exec dsh-raccoon-connect doctor`.
 
 ## Features
 
@@ -20,29 +62,35 @@ Bring the models bundled in the **SenseTime 小浣熊** (XiaoHuanXiong) desktop 
 
 - **Reasoning-effort detection** exists in the card and the composer, and deliberately makes no guesses (see below for why it usually reports *not validating*).
 
-## Install
+## Install and version mapping
 
 Requirement: the 小浣熊 desktop app installed and signed in. The plugin does not launch it and does not log in on your behalf.
 
 ```sh
-# Web (recommended)
-dsh plugin --profile web add dsh-raccoon-connect
-dsh web
+# ① npm (recommended)
+dsh plugin --profile desktop add dsh-raccoon-connect
+
+# ② From GitHub (lib/ is committed, so this works as-is)
+dsh plugin --profile desktop add github:zhlcba/dsh-raccoon-connect
+
+# ③ From a local checkout (development)
+dsh plugin --profile desktop add link:/path/to/dsh-raccoon-connect
 ```
 
-```sh
-# From a local checkout (development, before publishing)
-dsh plugin --profile web add link:D:/works/vibecoding/dsh-raccoon-work
-dsh web
-```
+Then **fully quit DSH (tray included) and start it again**, and look for the 商汤小浣熊 group in the model selector.
 
-**Version coupling**: this plugin is pinned to a DSH core version; mixing them fails the DSH boot.
+**Version coupling**: the plugin must match the DSH core generation; mixing them fails the DSH boot.
 
-| Plugin | Required DSH core | Node |
-|---|---|---|
-| 0.1.x | `0.1.5-rc.1` or newer | `^22.19.0 \|\| >=24.0.0` |
+| Plugin | Required DSH core | Node | Verified |
+|---|---|---|---|
+| `0.2.x` (this fork) | `>=0.2.1-rc.1 <0.3` | `^22.19.0 \|\| >=24.0.0` | Windows + Desktop, `0.2.1-rc.2` ✅ |
+| `0.1.x` (upstream) | `0.1.5-rc.1` | same | upstream verified Web profile only |
 
-Verified on the **Web** profile only; `dsh.client.platform` is declared as `web`.
+Verification scope of this fork: Windows, Desktop profile, DSH `0.2.1-rc.2` — the plugin registers
+(`$DSH_HOME/.raccoon-host-heartbeat.json`), the model group appears in the picker, and selected models
+send and receive. The settings card is contributed through a runtime bridge (the new kernel's render slot
+union does not include it); whether the card renders was not verified item by item, and its absence does
+not affect the model channel. `dsh.client.platform` is still declared as `web`.
 
 ## Configuration
 

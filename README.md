@@ -1,18 +1,64 @@
 # DSH 小浣熊 Connect
 
-把**商汤小浣熊**桌面 App 里包含的模型（GLM-5.3、GLM-5.3-Flash、Kimi-K3、SenseNova-6.8-Flash-Lite、DeepSeek-V4.1-Flash 等）自动接入 DeepSeek Harness，在 DSH 的对话窗口里零配置使用。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![DSH 内核](https://img.shields.io/badge/DSH-0.2.1--rc.1%20~%200.2.x-2f6f4f.svg)](#安装与版本对应)
+[![tests](https://img.shields.io/badge/tests-176%20passing-4b6fff.svg)](./CHANGELOG.md)
+[![npm](https://img.shields.io/npm/v/dsh-raccoon-connect?color=cb3837)](https://www.npmjs.com/package/dsh-raccoon-connect)
 
-> ### 这是 fork：加了 DSH 0.2.x 支持
+把**商汤小浣熊**桌面 App 里的模型（GLM-5.3、GLM-5.3-Flash、Kimi-K3、SenseNova-6.8-Flash-Lite、DeepSeek-V4.1-Flash 等）
+接进 **DeepSeek Harness**，在 DSH 的对话窗口里直接选、直接用——**不用填任何 API Key**。
+插件复用桌面端自己的登录态，账号切换自动跟随，模型名后面还带着上游的计费倍率与促销标签。
+
+> ### 这是带 DSH 0.2.x 支持的 fork
 >
 > 上游 [liudapeng0311/dsh-raccoon-work](https://github.com/liudapeng0311/dsh-raccoon-work) 只声明支持 `0.1.5-rc.1`，
-> 在 DSH 0.2.x 内核上会被兼容性校验直接拒绝、装不上。**本 fork 把内核适配补到 0.2.x**，
+> 在 DSH 0.2.x 内核上会被兼容性校验**直接拒绝、装不上**。本 fork 把内核适配补到 0.2.x，
 > 并在 Windows + Desktop profile + `0.2.1-rc.2` 上实测可用（模型分组出现、可正常对话）。
 >
-> **除内核适配外没有改任何东西**——上游协议、令牌语义、倍率算法、识图判定、探测逻辑一律保持原样。
-> 逐条改动见 [CHANGELOG.md](./CHANGELOG.md)。
+> **除内核适配外没有改任何东西**——上游协议、令牌语义、倍率算法、识图判定、探测逻辑一律保持原样；
+> 176 个上游测试全部通过。逐条改动见 [CHANGELOG.md](./CHANGELOG.md)。
 >
 > 上游协议与实现思路另参考 [corrinehu/dsh-workbuddy-connect](https://github.com/corrinehu/dsh-workbuddy-connect)（MIT），
 > 但上游协议、令牌语义、倍率算法与探测判定全部按小浣熊网关的**实测行为**重写，见 `docs/upstream-protocol.md`。
+
+## 快速开始
+
+**前置**：本机已安装并登录 [商汤小浣熊桌面端](https://xiaohuanxiong.com)。插件不启动它、也不代替它登录。
+
+```sh
+# 1) 安装插件（Desktop profile；Web 端把 desktop 换成 web）
+dsh plugin --profile desktop add dsh-raccoon-connect
+# 或直接从 GitHub 装：
+# dsh plugin --profile desktop add github:zhlcba/dsh-raccoon-connect
+
+# 2) 完全退出 DSH（含托盘）再重新打开
+
+# 3) 模型选择器里选「商汤小浣熊」分组的模型，开聊
+```
+
+装完**不需要再登录一次**——插件直接读桌面端写给本地 agent 的凭据文件。
+
+## 常见问题
+
+**桌面端要一直开着吗？**
+不用。插件读的是凭据**文件**（`~/.box-agent/config/auth.json`），不是运行中的进程。只要桌面端曾经登录过、
+凭据仍在有效期内，关掉 App 照样能用。只有三种情况需要打开 App：首次登录、凭据失效/被吊销、切换账号。
+
+**支持哪些 DSH 版本？**
+本 fork 支持 `0.2.1-rc.1` – `0.2.x`（实测 `0.2.1-rc.2`）。上游 0.1.x 线请用[上游仓库](https://github.com/liudapeng0311/dsh-raccoon-work)。
+装错世代会被 DSH 的兼容性校验拒绝——这是保护，不是故障。
+
+**和 `dsh-connect-sensenova-token-plan` 有什么区别？**
+两者是**互不依赖**的两条通道：那条走商汤控制台的账号密码登录与网页微信扫码；本插件走**桌面端凭据**。
+所以上游网页扫码页有任何变动都不影响本插件。
+
+**会消耗我自己的积分吗？**
+会——用的是你小浣熊账号自己的额度。插件只做本机转发，不代理、不上传你的数据，凭据也不出本机。
+请遵守商汤小浣熊的服务条款，详见文末[免责声明](#免责声明)。
+
+**装完看不到模型分组？**
+按顺序查：① 桌面端是否登录过（`~/.box-agent/config/auth.json` 是否存在）；② DSH 是否**完全重启**过；
+③ 跑 `dsh plugin --profile desktop exec dsh-raccoon-connect doctor` 看诊断。
 
 ## 功能
 
@@ -30,21 +76,22 @@
 
 - **推理等级探测**：卡片与输入框上都有「检测」入口，但**默认不做任何猜测**（见下文为什么它通常给出「不可校验」）。
 
-## 安装
+## 安装与版本对应
 
 前置：已安装并登录商汤小浣熊桌面端。插件不启动它、也不代替它登录。
 
 ```sh
-# 从 GitHub 安装（本 fork）
+# ① npm（推荐）
+dsh plugin --profile desktop add dsh-raccoon-connect
+
+# ② GitHub 源码（lib/ 已入库，装完即可用）
 dsh plugin --profile desktop add github:zhlcba/dsh-raccoon-connect
-dsh
+
+# ③ 本地目录（开发用）
+dsh plugin --profile desktop add link:/path/to/dsh-raccoon-connect
 ```
 
-```sh
-# 从本地目录安装（开发/未发布时）
-dsh plugin --profile desktop add link:D:/works/vibecoding/dsh-raccoon-work
-dsh
-```
+装完**完全退出 DSH（含托盘）再启动**，然后在模型选择器里找「商汤小浣熊」分组。
 
 **版本对应**：插件必须与 DSH 核心的世代匹配，混用会导致 DSH 启动失败。
 
