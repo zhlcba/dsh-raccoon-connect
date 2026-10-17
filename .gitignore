@@ -5,3 +5,4 @@ ref
 probe
 *.tsbuildinfo
 .DS_Store
+*.tgz
