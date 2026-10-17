@@ -1,0 +1,114 @@
+{
+  "name": "dsh-raccoon-connect",
+  "displayName": "DSH 小浣熊 Connect",
+  "description": "Bring SenseTime xiaohuanxiong desktop-app models into DeepSeek Harness (DSH). Works on DSH 0.2.x kernels; upstream only supports 0.1.5.",
+  "version": "0.2.0",
+  "author": "dsh-raccoon-work",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "xiaohuanxiong",
+    "raccoon",
+    "model-provider"
+  ],
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "bin": {
+    "dsh-raccoon-connect": "lib/bin.js"
+  },
+  "scripts": {
+    "prepack": "npm run build",
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings-plugins",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-model-selection",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-atomic-write": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-attachment": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-llm-pi-ai": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/dsh-settings": ">=0.2.1-rc.1 <0.3",
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "@earendil-works/pi-ai": "^1.3.0",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-atomic-write": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.1-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "@earendil-works/pi-ai": "1.3.0",
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-model-selection": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.1",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "@types/react-test-renderer": "^18.3.1",
+    "react-test-renderer": "18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8",
+    "@deepseek-ai/dsh-launch-environment": "0.2.1-rc.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhlcba/dsh-raccoon-connect.git"
+  },
+  "homepage": "https://github.com/zhlcba/dsh-raccoon-connect#readme",
+  "bugs": {
+    "url": "https://github.com/zhlcba/dsh-raccoon-connect/issues"
+  }
+}

@@ -1,0 +1,7 @@
+# Build output IS committed: DSH's github: install source does not run prepack,
+# so without lib/ a GitHub install would be broken on arrival.
+node_modules
+ref
+probe
+*.tsbuildinfo
+.DS_Store

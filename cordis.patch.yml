@@ -1,0 +1,6 @@
+# Register the 小浣熊 provider without changing the profile's current default
+# model. The plugin reuses the desktop app's sign-in (its box-agent auth file);
+# no separate OAuth flow is started.
+- insert:
+    - id: llm-raccoon
+      name: dsh-raccoon-connect
