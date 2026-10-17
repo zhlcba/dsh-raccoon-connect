@@ -77,6 +77,21 @@ npm publish --registry=https://registry.npmjs.org/
 git blob sha"的自动化都会被行尾差异骗到，从而产生一堆只有行尾变化的伪提交。
 比较时务必用 git 规范化后的内容（`git ls-files -s` + `git cat-file blob`）。
 
+### 用 API 推送之后，本地要重新对齐
+
+API 提交产生的 commit SHA 与本地那份**必然不同**（committer、时间戳都不一样），
+尽管内容一致。所以 API 推送成功后，本地的 `main` 与 `origin/main` 会分叉，
+下一次 `git push` 会被判成 non-fast-forward 而拒绝。
+
+网络恢复后对齐一次即可：
+
+```sh
+git fetch origin
+git reset --hard origin/main     # 内容一致，重置是安全的
+```
+
+（`sync-to-github.py` 是按**内容**比较的，不受这个分叉影响，可以照常使用。）
+
 ---
 
 ## 发 npm 的注意事项
