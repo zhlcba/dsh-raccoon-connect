@@ -121,6 +121,33 @@ git reset --hard origin/main     # 内容一致，重置是安全的
 
 ---
 
+### ⚠️ 锁文件里不要留镜像地址（会让 CI 直接装不上）
+
+用国内的 npmmirror 装过依赖后，`package-lock.json` 的 `resolved` 字段会记下镜像地址，
+例如 `https://registry.npmmirror.com/zod/-/zod-4.4.3.tgz`。
+
+**较新的 npm 会以 `EALLOWREMOTE` 直接拒绝安装**：
+
+```
+npm error code EALLOWREMOTE
+npm error Fetching packages of type "remote" have been disabled
+npm error Refusing to fetch "zod@https://registry.npmmirror.com/zod/-/zod-4.4.3.tgz"
+```
+
+`ci.yml` / `release.yml` 里都升级了 npm，所以一定会撞上。
+
+**修复**（integrity 哈希不用改，镜像内容与官方一致）：
+
+```sh
+# 把镜像地址批量换回官方源
+python -c "p='package-lock.json';c=open(p,encoding='utf-8').read();open(p,'w',encoding='utf-8').write(c.replace('https://registry.npmmirror.com/','https://registry.npmjs.org/'))"
+```
+
+本地开发想用镜像时，**在命令行临时指定 `--registry`，不要写进 `.npmrc`**；装完记得检查 lock 有没有被污染。
+`ci.yml` 里已加了一道检查（grep 到 `npmmirror`/`cdn.`/`registry.yarnpkg` 就报错）。
+
+---
+
 ## 发 npm 的注意事项
 
 - 包名 `dsh-raccoon-connect`（npm 上未被占用，属于本 fork）。
@@ -137,9 +164,12 @@ git reset --hard origin/main     # 内容一致，重置是安全的
 
 ---
 
-## CI 自动发布（推荐，配好后无需任何 token / 验证码）
+## CI 自动发布（已配置并验证通过 ✅）
 
-仓库里已有两个工作流：
+**现状**：Trusted Publisher 已配置，`v0.2.1` 已通过它成功发布（带 SLSA provenance），
+全程未使用任何 token。
+
+仓库里有两个工作流：
 
 | 文件 | 触发 | 作用 |
 |---|---|---|
