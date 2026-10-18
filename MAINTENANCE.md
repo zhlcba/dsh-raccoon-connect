@@ -36,7 +36,23 @@ Gitee 的推送很稳，GitHub 的推送经常被重置——所以流程建议�
    [dsh-workbuddy-connect](https://github.com/corrinehu/dsh-workbuddy-connect) 的版本表
    （那个插件维护得最勤，它的对照表基本就是 DSH 内核世代的风向标）。
 2. **改 `peerDependencies` 范围**，别用精确钉死——精确钉死会让内核每升一个 rc 都要
-   用户手动申请 `allow-version` 豁免。本 fork 已改为 `>=0.2.1-rc.1 <0.3` 这种区间。
+   用户手动申请 `allow-version` 豁免。
+
+   ⚠️ **但「看起来宽」的范围也会静默挡住预发布内核。** node-semver 的规则：带预发布
+   标签的版本，只有当范围里存在**与自己 `major.minor.patch` 元组完全相同、且自身也带
+   预发布标签**的比较符时才可能通过。所以 `>=0.2.1-rc.1 <0.3` 只放行 `0.2.1-*`，
+   `0.2.2-rc.1` 会被排除。正确写法是显式列出每个 patch 元组的分支：
+
+   ```
+   >=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || ... || >=0.2.9-rc.1 <0.3
+   ```
+
+   **内核 patch 号升到已有分支之外时（如 `0.2.10`），必须补一条新的 `||` 分支**，
+   否则用户装不上。验证方法：
+
+   ```sh
+   node -e "const s=require('semver');console.log(s.satisfies('0.2.10-rc.1', require('./package.json').peerDependencies['@deepseek-ai/dsh-llm']))"
+   ```
 3. **跑类型检查**，让编译器告诉你哪里的 API 变了：
    ```sh
    npm install --legacy-peer-deps
