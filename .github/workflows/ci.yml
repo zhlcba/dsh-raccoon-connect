@@ -38,11 +38,18 @@ jobs:
 
       # 防止「改了 src 忘了提交 lib/」——DSH 的 github: 安装源不跑 prepack，
       # lib/ 不入库的话别人装完就是坏的。
+      #
+      # core.fileMode=false：lib/bin.js 带 shebang，Linux 构建可能给它加执行位
+      # （Windows 无此概念，本地永远复现不了），那只是权限差异，不是内容差异。
       - name: 检查 lib/ 是否与源码同步
         run: |
-          if [ -n "$(git status --porcelain lib/)" ]; then
+          git -c core.fileMode=false status --porcelain lib/ > /tmp/lib_diff.txt
+          if [ -s /tmp/lib_diff.txt ]; then
             echo "::error::lib/ 与构建结果不一致——请本地跑 npx tsdown 后把 lib/ 一起提交"
-            git status --porcelain lib/
+            echo "----- 差异明细 -----"
+            cat /tmp/lib_diff.txt
+            echo "----- git diff -----"
+            git -c core.fileMode=false diff --stat lib/ || true
             exit 1
           fi
           echo "lib/ 已同步 ✅"

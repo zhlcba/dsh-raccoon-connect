@@ -1,0 +1,19 @@
+# 统一行尾，避免 Windows(CRLF) / Linux(LF) 与 core.autocrlf 造成的伪差异。
+# 本机 core.autocrlf=true，历史上因此产生过「一堆只有行尾变化的伪提交」。
+* text=auto
+
+*.js    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+
+# 二进制 / 归档，不要做任何行尾处理
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.tgz   binary
+*.zip   binary
