@@ -7,7 +7,8 @@
 [![tests](https://img.shields.io/badge/tests-176%20passing-4b6fff.svg)](./CHANGELOG.md)
 [![npm](https://img.shields.io/npm/v/dsh-raccoon-connect?color=cb3837)](https://www.npmjs.com/package/dsh-raccoon-connect)
 
-> **Mirror for users in China**: [Gitee · dhzl/dsh-raccoon-connect](https://gitee.com/dhzl/dsh-raccoon-connect) — use this when GitHub is hard to reach; content is kept in sync.
+> **Repository**: [GitHub · zhlcba/dsh-raccoon-connect](https://github.com/zhlcba/dsh-raccoon-connect)
+> | **Mirror for users in China**: [Gitee · dhzl/dsh-raccoon-connect](https://gitee.com/dhzl/dsh-raccoon-connect) — use this when GitHub is hard to reach; content is kept in sync.
 
 Bring the models bundled in the **SenseTime 小浣熊** (XiaoHuanXiong) desktop app — GLM-5.3, GLM-5.3-Flash, Kimi-K3, SenseNova-6.8-Flash-Lite, DeepSeek-V4.1-Flash and whatever else your account is served — into DeepSeek Harness. Pick them in the model selector and talk: **no API key to paste.** The plugin reuses the desktop app's stored sign-in and follows account switches automatically.
 
