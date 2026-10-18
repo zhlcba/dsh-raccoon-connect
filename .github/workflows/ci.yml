@@ -24,6 +24,16 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      # 用镜像装过依赖的话，lock 里会留下镜像地址；较新的 npm 会以
+      # EALLOWREMOTE「Refusing to fetch ... remote」直接拒绝安装。
+      - name: 检查 package-lock 只引用官方源
+        run: |
+          if grep -nE 'npmmirror|registry\.yarnpkg|cdn\.' package-lock.json; then
+            echo "::error::package-lock.json 含非官方源地址——请在官方源下重装依赖后提交 lock"
+            exit 1
+          fi
+          echo "lock 只引用官方源 ✅"
+
       - name: Type check (host)
         run: npx tsc -p tsconfig.json --noEmit
 
