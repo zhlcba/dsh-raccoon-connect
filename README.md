@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![DSH 内核](https://img.shields.io/badge/DSH-0.2.1--rc.1%20~%200.2.x-2f6f4f.svg)](#安装与版本对应)
 [![tests](https://img.shields.io/badge/tests-176%20passing-4b6fff.svg)](./CHANGELOG.md)
+[![CI](https://github.com/zhlcba/dsh-raccoon-connect/actions/workflows/ci.yml/badge.svg)](https://github.com/zhlcba/dsh-raccoon-connect/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/dsh-raccoon-connect?color=cb3837)](https://www.npmjs.com/package/dsh-raccoon-connect)
 
 > **仓库**：[GitHub · zhlcba/dsh-raccoon-connect](https://github.com/zhlcba/dsh-raccoon-connect)

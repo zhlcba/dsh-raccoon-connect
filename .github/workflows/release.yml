@@ -1,0 +1,82 @@
+name: Release
+
+# 推一个 v* tag 就自动：校验 → 构建 → 发布到 npm → 建 GitHub Release
+#
+# 发布走 **npm Trusted Publishing (OIDC)**：不需要 NPM_TOKEN，
+# npm 直接信任本仓库的 GitHub Actions 身份。配置方法见 MAINTENANCE.md。
+#
+# ⚠️ 本文件名（release.yml）必须与 npmjs.com 上配置的 Workflow filename 一致。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 建 GitHub Release
+  id-token: write   # ★ Trusted Publishing 必需：申请 OIDC token
+
+jobs:
+  publish:
+    name: 发布到 npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      # Trusted Publishing 需要较新的 npm
+      - name: 升级 npm
+        run: npm install -g npm@latest && npm --version
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      # 发布前的四道关，与 CONTRIBUTING.md 一致
+      - name: Type check (host)
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Type check (client)
+        run: npx tsc -p tsconfig.client.json --noEmit
+
+      - name: Tests
+        run: npx vitest run
+
+      - name: Build
+        run: npx tsdown
+
+      # 版本号一致性：tag 必须与 package.json 里的 version 对上
+      - name: 校验 tag 与版本号一致
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "tag=$TAG  package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG 与 package.json 的 $PKG 不一致"
+            exit 1
+          fi
+
+      # ★ 不传 NODE_AUTH_TOKEN：OIDC 身份即凭据
+      - name: Publish to npm (Trusted Publishing)
+        run: npm publish --provenance --access public
+
+      - name: 建 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "安装：
+          \`\`\`sh
+          dsh plugin --profile desktop add dsh-raccoon-connect
+          \`\`\`
+          npm: https://www.npmjs.com/package/dsh-raccoon-connect
+          Gitee 镜像: https://gitee.com/dhzl/dsh-raccoon-connect"

@@ -108,11 +108,54 @@ git reset --hard origin/main     # 内容一致，重置是安全的
 ## 发 npm 的注意事项
 
 - 包名 `dsh-raccoon-connect`（npm 上未被占用，属于本 fork）。
-- **账号开了 2FA**：`npm publish` 需要 `--otp=<6 位验证码>`，或使用能绕过 2FA 的
-  Automation token。普通细粒度 token 会被 `EOTP` 拒绝。
+- **npm 的政策：发布者账号必须启用 2FA**，然后二选一：
+  - 交互式：`npm publish --otp=<6 位码>`
+  - 非交互式：**创建时勾选了「Bypass 2FA」的 granular access token**
+- ⚠️ **本机账号 2FA 只绑了安全密钥（WebAuthn），CLI 永远拿不到 OTP**——
+  所以手动发布**必须**用带 Bypass 2FA 的 token。普通 token 会被 `EOTP` 拒绝；
+  **关掉 2FA 更糟**，会报 403「...is required to publish packages」。
+- `Bypass 2FA` **只在 token 创建时能设**，事后改不了。
 - 建议 `npm publish` 时显式带 `--registry=https://registry.npmjs.org/`
   （本机可能配过 npmmirror 镜像，镜像不可发布）。
 - `files` 白名单决定包内容：`lib` / `cordis.patch.yml` / 两个 README / `CHANGELOG.md` / `LICENSE`。
+
+---
+
+## CI 自动发布（推荐，配好后无需任何 token / 验证码）
+
+仓库里已有两个工作流：
+
+| 文件 | 触发 | 作用 |
+|---|---|---|
+| `.github/workflows/ci.yml` | push / PR 到 main | 类型检查 ×2、测试、构建，并检查 `lib/` 与源码同步 |
+| `.github/workflows/release.yml` | 推 `v*` tag | 校验 → 构建 → **发布 npm** → 建 GitHub Release |
+
+发布走 **npm Trusted Publishing (OIDC)**：不需要 `NPM_TOKEN`，npm 直接信任
+本仓库的 GitHub Actions 身份。**一次性配置**：
+
+1. 登录 npmjs.com → 进入包页面 `dsh-raccoon-connect` → **Settings**
+2. 找到 **Trusted Publisher** → 选 **GitHub Actions**
+3. 填：
+   - Organization or user：`zhlcba`
+   - Repository：`dsh-raccoon-connect`
+   - Workflow filename：**`release.yml`**（必须与实际文件名一致）
+   - Environment：留空
+4. 保存
+
+之后发版的完整流程变成：
+
+```sh
+# 1. 改 package.json 的 version + 更新 CHANGELOG.md
+# 2. 本地验证四道关（见下）
+# 3. 提交并推送到 GitHub 和 Gitee
+git add -A && git commit -m "release: v0.2.1"
+git push origin main
+git push gitee main
+# 4. 打 tag 推送 —— CI 自动完成发布
+git tag v0.2.1 && git push origin v0.2.1
+```
+
+> Trusted Publishing 还要求包是 **public** 且仓库是 **public**（两者都满足）。
 
 ---
 
