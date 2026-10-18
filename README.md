@@ -5,6 +5,8 @@
 [![tests](https://img.shields.io/badge/tests-176%20passing-4b6fff.svg)](./CHANGELOG.md)
 [![npm](https://img.shields.io/npm/v/dsh-raccoon-connect?color=cb3837)](https://www.npmjs.com/package/dsh-raccoon-connect)
 
+> **国内镜像**：[Gitee · dhzl/dsh-raccoon-connect](https://gitee.com/dhzl/dsh-raccoon-connect) —— GitHub 访问不稳时用这个，内容同步。
+
 把**商汤小浣熊**桌面 App 里的模型（GLM-5.3、GLM-5.3-Flash、Kimi-K3、SenseNova-6.8-Flash-Lite、DeepSeek-V4.1-Flash 等）
 接进 **DeepSeek Harness**，在 DSH 的对话窗口里直接选、直接用——**不用填任何 API Key**。
 插件复用桌面端自己的登录态，账号切换自动跟随，模型名后面还带着上游的计费倍率与促销标签。

@@ -6,6 +6,17 @@
 **原则**：只做内核适配，不改业务逻辑。上游的协议实现、令牌轮转、识图判定、倍率与探测逻辑
 都是上游按实测重写过的，没有新的实测依据就不要动——改了很难解释，也容易引入回归。
 
+## 三个发布位置，改一次要同步三处
+
+| 位置 | 地址 | 推送方式 |
+|---|---|---|
+| GitHub | https://github.com/zhlcba/dsh-raccoon-connect | `git push`（本机常被重置，见下文 API 兜底） |
+| **Gitee（国内镜像）** | https://gitee.com/dhzl/dsh-raccoon-connect | `git push gitee main`（直连，稳定快速） |
+| **npm** | https://www.npmjs.com/package/dsh-raccoon-connect | `npm publish`（见下文 2FA 说明） |
+
+**任何内容改动都要同步到 GitHub 和 Gitee 两处**，否则两个平台的用户看到的东西会不一致。
+Gitee 的推送很稳，GitHub 的推送经常被重置——所以流程建议是：**先推 Gitee 验证内容，再用 API 兜底同步 GitHub**。
+
 ---
 
 ## 什么时候需要动这个仓库
