@@ -225,6 +225,37 @@ describe('fetchCatalog', () => {
     nextResponse = () => jsonResponse({ code: 0, data: { categories: [{ type: 'chat', models: [] }] } })
     await expect(makeClient().fetchCatalog('AT')).rejects.toThrow(/resolved to an empty list/u)
   })
+
+  /**
+   * Regression: a 4096-character cap in `textOf` used to truncate this body.
+   *
+   * The gateway's `model_catalog` is account-dependent and grows as the roster
+   * grows. Once the document crossed 4096 characters the slice cut it mid-string,
+   * `JSON.parse` threw, and the plugin silently fell back to the built-in roster
+   * — so a user with 7 visible models saw 5, with `[object Object]` as the only
+   * explanation. The body below is the shape and size that triggered it.
+   */
+  it('parses a catalog body larger than 4096 characters instead of truncating it', async () => {
+    const filler = 'x'.repeat(400)
+    const models = Array.from({ length: 12 }, (_, index) => ({
+      name: `sn-model-${index}`,
+      description: `Model ${index}`,
+      display_description: filler,
+      visible: true,
+      params: { context_window: 1_000_000, max_tokens: 100_000 },
+      billing_multiplier: 1,
+    }))
+    const body = {
+      code: 0,
+      message: 'success',
+      data: { categories: [{ type: 'chat', default_model: 'sn-model-0', models }] },
+    }
+    expect(JSON.stringify(body).length).toBeGreaterThan(4096)
+    nextResponse = () => jsonResponse(body)
+    const document = await makeClient().fetchCatalog('AT')
+    expect(document.defaultModelId).toBe('sn-model-0')
+    expect(document.models).toHaveLength(12)
+  })
 })
 
 describe('fetchBalance', () => {

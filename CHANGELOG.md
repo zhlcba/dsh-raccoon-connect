@@ -9,6 +9,54 @@
 
 ---
 
+## [0.2.2] — 2026-10-24
+
+修一个**让新模型永远显示不出来**的截断 bug。上游新增模型后，插件仍然只显示 5 个
+兜底名册里的模型，卡片上唯一的线索是 `[object Object]`。
+
+### 根因
+
+`src/upstream.ts` 的 `textOf()` 把响应体截断到 4096 字符：
+
+```ts
+return (await response.text()).slice(0, 4096)
+```
+
+这个上限在 `model_catalog` 文档还小于 4 KiB 时无害。但该文档是**按账号变化的**，
+会随模型数量增长。上游把目录扩到 10 个模型（其中 7 个 `visible: true`）后，
+响应变成 **5650 字节 / 5140 字符**，于是：
+
+1. `slice(0, 4096)` 把 JSON 从中间切断
+2. `JSON.parse` 抛 `Unterminated string at position 4096`
+3. `envelope()` 判定为失败（`kind: 'client'`）
+4. `fetchCatalog` 捕获后回退到 `FALLBACK_CATALOG`（只有 5 个模型）
+5. 卡片显示 `catalog.source: fallback`，错误信息是 `[object Object]`
+
+实测对照：
+
+| | 结果 |
+|---|---|
+| `slice(0, 4096)` 后解析 | ❌ 失败 |
+| 完整 5140 字符解析 | ✅ `code=0`，10 个模型 |
+
+### 改了什么
+
+**1. `textOf()` 不再截断** —— 它的返回值是 `JSON.parse` 的输入，不该有长度上限。
+长度限制只应出现在**展示**错误消息的地方（`failure`、错误里的 `slice(0, 512)`）。
+
+**2. 错误信息不再变成 `[object Object]`** —— `RaccoonUpstreamClient.failure()` 抛出的是
+普通对象 `{ ok: false, status, kind, message }` 而不是 `Error`，原来 `String(error)`
+把所有上游失败都压成了 `[object Object]`，正是它让这个 bug 隐身了两天。
+新增 `errorMessage()` 优先读对象里的 `kind` / `status` / `message`。
+
+**3. 新增回归测试** —— `tests/upstream.spec.ts` 里构造一个 >4096 字符的合法目录文档，
+断言能解析出全部 12 个模型。测试总数 176 → 177。
+
+> 这个 bug 不影响登录态与计费：诊断时账号 `signed-in`、余额 2306 积分均正常，
+> 上游接口直连返回 200 / `code: 0`。
+
+---
+
 ## [0.2.1] — 2026-10-18
 
 修一个**会静默挡住未来内核**的依赖范围问题。0.2.0 的 `>=0.2.1-rc.1 <0.3` 看起来是宽范围，

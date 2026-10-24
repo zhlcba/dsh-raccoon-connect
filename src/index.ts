@@ -329,6 +329,29 @@ export function adoptIdentity(runtime: Runtime, account: string | undefined): vo
 }
 
 /**
+ * Readable text for anything a caller may throw.
+ *
+ * `RaccoonUpstreamClient.failure()` throws a plain `{ ok: false, status, kind,
+ * message }` record rather than an `Error`, so `String(error)` flattened every
+ * upstream failure to `[object Object]`. Prefer the record's own fields, and
+ * fall back to the generic stringification only when there is nothing to read.
+ */
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null) {
+    const record = error as Record<string, unknown>
+    const message = typeof record['message'] === 'string' ? record['message'].trim() : ''
+    const kind = typeof record['kind'] === 'string' ? record['kind'] : ''
+    const status = typeof record['status'] === 'number' ? String(record['status']) : ''
+    const tag = [kind, status].filter(part => part !== '').join(' ')
+    if (message !== '' && tag !== '') return `${tag}: ${message}`
+    if (message !== '') return message
+    if (tag !== '') return `raccoon: catalog fetch failed (${tag})`
+  }
+  return String(error)
+}
+
+/**
  * Fetch this account's catalog.
  *
  * - **One request at a time**: a second caller joins the in-flight fetch.
@@ -369,7 +392,13 @@ export async function fetchCatalog(runtime: Runtime, account: string): Promise<v
     } catch (error: unknown) {
       // A failure keeps whatever is already on screen and records why, so the
       // card can say "stale" instead of looking like an offline guess.
-      runtime.error = error instanceof Error ? error.message : String(error)
+      //
+      // `failure()` throws the envelope's plain `{ ok: false, status, kind,
+      // message }` record rather than an `Error`, so the old
+      // `String(error)` rendered every upstream failure as `[object Object]` —
+      // which is exactly how a 4 KiB body truncation stayed invisible while the
+      // user saw only "5 models". Prefer a readable field when there is one.
+      runtime.error = errorMessage(error)
       runtime.invalidate?.()
     }
   })()

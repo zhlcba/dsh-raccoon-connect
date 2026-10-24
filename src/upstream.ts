@@ -244,9 +244,24 @@ export class RaccoonUpstreamClient {
     }
   }
 
+  /**
+   * Read the whole response body, because `envelope` has to `JSON.parse` it.
+   *
+   * This used to return `(await response.text()).slice(0, 4096)`. That cap was
+   * survivable while the gateway's `model_catalog` document fitted in 4 KiB, but
+   * the roster is account-dependent and grows: once it crossed 4096 characters
+   * the slice cut the document mid-string, `JSON.parse` threw, `envelope`
+   * reported a failure, and the plugin silently degraded to the built-in
+   * fallback roster — new models never appeared, and the card showed only the
+   * unhelpful `[object Object]`.
+   *
+   * Bounding belongs at the sites that *display* a body (`failure`, or the
+   * `slice(0, 512)` when a message is carried into an error), not here, where
+   * the value is input to a parser.
+   */
   private static async textOf(response: Response): Promise<string> {
     try {
-      return (await response.text()).slice(0, 4096)
+      return await response.text()
     } catch {
       return ''
     }
