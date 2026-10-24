@@ -101,8 +101,14 @@ dsh plugin --profile desktop add link:/path/to/dsh-raccoon-connect
 
 | 插件版本 | 要求的 DSH 核心 | Node | 实测 |
 |---|---|---|---|
-| `0.2.x`（本 fork） | `>=0.2.1-rc.1 <0.3` | `^22.19.0 \|\| >=24.0.0` | Windows + Desktop，`0.2.1-rc.2` ✅ |
+| `0.2.x`（本 fork） | `0.2.1-rc.1` – `0.2.9` 各预发布线的显式并集※ | `^22.19.0 \|\| >=24.0.0` | Windows + Desktop，`0.2.1-rc.2` ✅ |
 | `0.1.x`（上游） | `0.1.5-rc.1` | 同上 | 上游只在 Web profile 验证过 |
+
+※ **别把范围写成 `>=0.2.1-rc.1 <0.3`**。按 node-semver 规则，带预发布标签的版本只有在
+范围里存在「与自己 `major.minor.patch` 相同、且自身也带预发布标签」的比较符时才可能被接受；
+那样写实际**匹配不到 `0.2.2` 及以后的预发布内核**。`package.json` 里因此逐个列出：
+`>=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || … || >=0.2.9-rc.1 <0.3`。
+升级到新内核世代时，把这些分支一起前移（详见 `CHANGELOG` 的 0.2.1 一节）。
 
 本 fork 的实测范围：Windows、Desktop profile、DSH `0.2.1-rc.2`——插件能注册（`$DSH_HOME/.raccoon-host-heartbeat.json`）、
 模型分组出现在选择器、选中模型可正常收发。设置卡片走的是运行时桥接（新内核的 slot 联合类型不含它），

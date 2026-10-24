@@ -87,8 +87,16 @@ Then **fully quit DSH (tray included) and start it again**, and look for the 商
 
 | Plugin | Required DSH core | Node | Verified |
 |---|---|---|---|
-| `0.2.x` (this fork) | `>=0.2.1-rc.1 <0.3` | `^22.19.0 \|\| >=24.0.0` | Windows + Desktop, `0.2.1-rc.2` ✅ |
+| `0.2.x` (this fork) | explicit union of the `0.2.1-rc.1` – `0.2.9` prerelease lines (see note) | `^22.19.0 \|\| >=24.0.0` | Windows + Desktop, `0.2.1-rc.2` ✅ |
 | `0.1.x` (upstream) | `0.1.5-rc.1` | same | upstream verified Web profile only |
+
+Note: **do not write the range as `>=0.2.1-rc.1 <0.3`**. Under node-semver a prerelease version is
+only accepted when the range contains a comparator that shares its exact `major.minor.patch` tuple
+*and* itself carries a prerelease tag — so that form silently **excludes `0.2.2` and later
+prerelease kernels**. `package.json` therefore spells the branches out:
+`>=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || … || >=0.2.9-rc.1 <0.3`.
+When you move to a new kernel generation, shift the whole set together (the 0.2.1 entry in
+`CHANGELOG` walks through it).
 
 Verification scope of this fork: Windows, Desktop profile, DSH `0.2.1-rc.2` — the plugin registers
 (`$DSH_HOME/.raccoon-host-heartbeat.json`), the model group appears in the picker, and selected models
