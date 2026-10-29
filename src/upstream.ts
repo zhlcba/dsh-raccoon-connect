@@ -141,6 +141,16 @@ export interface RaccoonUpstreamOptions {
   fetchImpl?: typeof fetch
   /** Non-streaming request timeout; streaming is never timed out this way. */
   timeoutMs?: number
+  /**
+   * How long a streaming call may spend before the gateway sends response
+   * headers.
+   *
+   * Measured on this gateway (2026-10-29): first byte is normally 1–2 s, but a
+   * stalled call can sit for 60 s with nothing on the wire. The timer is cleared
+   * as soon as headers arrive, so a long *answer* is never cut off — only a
+   * gateway that has not started answering at all is.
+   */
+  streamFirstByteTimeoutMs?: number
 }
 
 function errorMessage(error: unknown): string {
@@ -184,12 +194,14 @@ export class RaccoonUpstreamClient {
   private readonly identity: () => RaccoonClientIdentity
   private readonly fetchImpl: typeof fetch
   private readonly timeoutMs: number
+  private readonly streamFirstByteTimeoutMs: number
 
   constructor(options: RaccoonUpstreamOptions) {
     this.variant = options.variant
     this.identity = options.identity ?? (() => ({ platform: 'desktop' }))
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis)
     this.timeoutMs = options.timeoutMs ?? 20_000
+    this.streamFirstByteTimeoutMs = options.streamFirstByteTimeoutMs ?? 60_000
   }
 
   /** LLM gateway base, without a trailing slash. */
@@ -378,6 +390,10 @@ export class RaccoonUpstreamClient {
    * OpenAI-compatible endpoint the desktop app's own agent uses, so rewriting
    * fields here would only risk diverging from what it actually accepts. The
    * response body is returned unread so the shim can pipe it byte for byte.
+   *
+   * Only the wait *before* headers is bounded; once the gateway has started
+   * answering, the stream is left alone so a slow or long answer is never cut
+   * short.
    */
   async chatStream(accessToken: string, body: unknown, signal?: AbortSignal): Promise<RaccoonUpstreamStream | RaccoonUpstreamFailure> {
     let response: Response
@@ -387,7 +403,7 @@ export class RaccoonUpstreamClient {
         headers: this.headers(accessToken),
         body: JSON.stringify(body),
         ...(signal === undefined ? {} : { signal }),
-      }, 0)
+      }, this.streamFirstByteTimeoutMs)
     } catch (error: unknown) {
       // A transport failure is reported as a gateway problem, not a client one:
       // pi-ai should retry it rather than surface it as a bad request.

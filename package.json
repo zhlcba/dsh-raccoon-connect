@@ -2,7 +2,7 @@
   "name": "dsh-raccoon-connect",
   "displayName": "DSH 小浣熊 Connect",
   "description": "Bring SenseTime xiaohuanxiong desktop-app models into DeepSeek Harness (DSH). Works on DSH 0.2.x kernels; upstream only supports 0.1.5.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "author": "dsh-raccoon-work",
   "keywords": [
     "dsh-plugin",

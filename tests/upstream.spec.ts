@@ -358,3 +358,40 @@ describe('probeEffort', () => {
     expect(attempt).toMatchObject({ status: 200, accepted: false, streamed: false })
   })
 })
+
+describe('chatStream first-byte timeout', () => {
+  /**
+   * The gateway normally answers in 1–2 s, but a stalled call was measured
+   * sitting for 60 s with nothing on the wire. Bounding the wait before headers
+   * keeps that from becoming an indefinite hang; the answer itself is not timed.
+   */
+  it('gives up on a call whose headers never arrive, as a retryable server fault', async () => {
+    const client = new RaccoonUpstreamClient({
+      variant: RACCOON_PRIMARY,
+      fetchImpl: ((input: unknown, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          calls.push({ url: String(input), init })
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })) as unknown as typeof fetch,
+      streamFirstByteTimeoutMs: 20,
+    })
+    const outcome = await client.chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('server')
+      expect(outcome.status).toBe(0)
+    }
+  })
+
+  it('leaves a slow but answering stream alone once headers have arrived', async () => {
+    const stream = sseResponse(['data: {"x":1}\n\n', 'data: [DONE]\n\n'])
+    nextResponse = () => stream.response
+    const client = new RaccoonUpstreamClient({
+      variant: RACCOON_PRIMARY,
+      fetchImpl: fetchStub as unknown as typeof fetch,
+      streamFirstByteTimeoutMs: 20,
+    })
+    const outcome = await client.chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(true)
+  })
+})

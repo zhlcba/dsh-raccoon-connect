@@ -687,6 +687,16 @@ interface RaccoonUpstreamOptions {
   fetchImpl?: typeof fetch;
   /** Non-streaming request timeout; streaming is never timed out this way. */
   timeoutMs?: number;
+  /**
+   * How long a streaming call may spend before the gateway sends response
+   * headers.
+   *
+   * Measured on this gateway (2026-10-29): first byte is normally 1–2 s, but a
+   * stalled call can sit for 60 s with nothing on the wire. The timer is cleared
+   * as soon as headers arrive, so a long *answer* is never cut off — only a
+   * gateway that has not started answering at all is.
+   */
+  streamFirstByteTimeoutMs?: number;
 }
 /** The 小浣熊 gateway client. */
 declare class RaccoonUpstreamClient {
@@ -694,6 +704,7 @@ declare class RaccoonUpstreamClient {
   private readonly identity;
   private readonly fetchImpl;
   private readonly timeoutMs;
+  private readonly streamFirstByteTimeoutMs;
   constructor(options: RaccoonUpstreamOptions);
   /** LLM gateway base, without a trailing slash. */
   get llmBase(): string;
@@ -755,6 +766,10 @@ declare class RaccoonUpstreamClient {
    * OpenAI-compatible endpoint the desktop app's own agent uses, so rewriting
    * fields here would only risk diverging from what it actually accepts. The
    * response body is returned unread so the shim can pipe it byte for byte.
+   *
+   * Only the wait *before* headers is bounded; once the gateway has started
+   * answering, the stream is left alone so a slow or long answer is never cut
+   * short.
    */
   chatStream(accessToken: string, body: unknown, signal?: AbortSignal): Promise<RaccoonUpstreamStream | RaccoonUpstreamFailure>;
   /**
