@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { classifyUpstreamError, KIND_STATUS, RaccoonUpstreamClient } from '../src/upstream.ts'
+import { classifyUpstreamError, KIND_STATUS, parseRetryAfterMs, RaccoonUpstreamClient } from '../src/upstream.ts'
 import { RACCOON_PRIMARY } from '../src/variants.ts'
 import type { RaccoonClientIdentity } from '../src/client-identity.ts'
 
@@ -393,5 +393,67 @@ describe('chatStream first-byte timeout', () => {
     })
     const outcome = await client.chatStream('AT', { model: 'glm', stream: true })
     expect(outcome.ok).toBe(true)
+  })
+})
+
+describe('parseRetryAfterMs', () => {
+  it('reads delta-seconds, which is what a throttle normally sends', () => {
+    expect(parseRetryAfterMs('30')).toBe(30_000)
+    expect(parseRetryAfterMs('0')).toBe(0)
+  })
+
+  it('reads an HTTP-date, since the header allows either form', () => {
+    const at = Date.now() + 20_000
+    const parsed = parseRetryAfterMs(new Date(at).toUTCString())
+    expect(parsed).toBeTypeOf('number')
+    expect(parsed!).toBeGreaterThan(15_000)
+    expect(parsed!).toBeLessThanOrEqual(21_000)
+  })
+
+  it('stays undefined for an absent or unparseable value', () => {
+    expect(parseRetryAfterMs(null)).toBeUndefined()
+    expect(parseRetryAfterMs('')).toBeUndefined()
+    expect(parseRetryAfterMs('soon')).toBeUndefined()
+  })
+})
+
+describe('chatStream rate-limit reporting', () => {
+  /** The 2026-11-02 failure: 6 attempts in 23 s, none of which could succeed. */
+  it('passes the gateway wait hint through so a retry is not blind', async () => {
+    nextResponse = () => new Response(
+      JSON.stringify({ error: { code: 'user_model_rate_limited', message: '您的模型请求频率超限，请稍后重试' } }),
+      { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '30' } },
+    )
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('soft_rate')
+      expect(outcome.retryAfterMs).toBe(30_000)
+    }
+  })
+
+  it('tells the caller that retrying the same model will not help when no hint came', async () => {
+    nextResponse = () => new Response(
+      JSON.stringify({ error: { code: 'user_model_rate_limited', message: '您的模型请求频率超限，请稍后重试' } }),
+      { status: 429, headers: { 'content-type': 'application/json' } },
+    )
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('soft_rate')
+      expect(outcome.retryAfterMs).toBeUndefined()
+      expect(outcome.message).toContain('换用其他模型')
+      expect(outcome.message).toContain('user_model_rate_limited')
+    }
+  })
+
+  it('does not attach the rate-limit hint to unrelated failures', async () => {
+    nextResponse = () => jsonResponse({ code: 200003, message: 'login expired' }, 400)
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('session_dead')
+      expect(outcome.message).not.toContain('换用其他模型')
+    }
   })
 })

@@ -650,6 +650,8 @@ interface RaccoonUpstreamFailure {
   status: number;
   kind: RaccoonErrorKind;
   message: string;
+  /** Milliseconds the upstream asked the caller to wait, when it said so. */
+  retryAfterMs?: number;
 }
 /** A successful streaming call: the caller pipes the body through untouched. */
 interface RaccoonUpstreamStream {

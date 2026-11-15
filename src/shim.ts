@@ -51,9 +51,9 @@ export interface RaccoonShim {
   port(): number
 }
 
-function writeJson(res: import('node:http').ServerResponse, status: number, payload: unknown): void {
+function writeJson(res: import('node:http').ServerResponse, status: number, payload: unknown, headers: Record<string, string> = {}): void {
   const body = JSON.stringify(payload)
-  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) })
+  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...headers })
   res.end(body)
 }
 
@@ -128,7 +128,12 @@ export async function startRaccoonShim(options: RaccoonShimOptions): Promise<Rac
     const outcome = await options.upstream.chatStream(accessToken, raw, reqForSignal(req))
     if (outcome.ok === false) {
       const failure: RaccoonUpstreamFailure = outcome
-      writeJson(res, KIND_STATUS[failure.kind], openAiError(failure.kind, failure.message))
+      // Forward the gateway's own wait hint when it sent one: pi-ai reads
+      // Retry-After on a 429, and a blind retry just burns the same quota.
+      const headers: Record<string, string> = failure.retryAfterMs === undefined
+        ? {}
+        : { 'retry-after': String(Math.max(1, Math.ceil(failure.retryAfterMs / 1000))) }
+      writeJson(res, KIND_STATUS[failure.kind], openAiError(failure.kind, failure.message), headers)
       return
     }
     const stream: RaccoonUpstreamStream = outcome

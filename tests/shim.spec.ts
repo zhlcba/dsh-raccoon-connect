@@ -240,6 +240,36 @@ describe('shim routes', () => {
     expect(await res.json()).toEqual({ error: { message: 'too many requests', type: 'soft_rate', code: 'soft_rate' } })
   })
 
+  it('forwards the gateway wait hint on a throttle so the caller does not retry blind', async () => {
+    const failure: RaccoonUpstreamFailure = {
+      ok: false,
+      status: 429,
+      kind: 'soft_rate',
+      message: '频率超限',
+      retryAfterMs: 30_000,
+    }
+    chatOutcome = Promise.resolve(failure)
+    const res = await fetch(`${shim.baseUrl()}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { ...bearer(), 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'glm', messages: [] }),
+    })
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBe('30')
+  })
+
+  it('leaves Retry-After off when the gateway gave no hint', async () => {
+    const failure: RaccoonUpstreamFailure = { ok: false, status: 429, kind: 'soft_rate', message: '频率超限' }
+    chatOutcome = Promise.resolve(failure)
+    const res = await fetch(`${shim.baseUrl()}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { ...bearer(), 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'glm', messages: [] }),
+    })
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBeNull()
+  })
+
   it('turns a credential-resolution failure into a non-retryable 401 session_dead', async () => {
     accessTokenImpl = async () => { throw new Error('raccoon: no signed-in 商汤小浣熊 account found') }
     const res = await fetch(`${shim.baseUrl()}/v1/chat/completions`, {

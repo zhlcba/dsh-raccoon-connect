@@ -94,12 +94,31 @@ export function classifyUpstreamError(status: number, body: string): RaccoonErro
   return 'client'
 }
 
+/**
+ * Parse a `Retry-After` header value into milliseconds.
+ *
+ * When the gateway condescends to send one it is either delta-seconds or an
+ * HTTP-date. Passing it through lets the caller's retry logic wait the right
+ * amount instead of hammering the same throttled model: the burst of six
+ * retries seen on 2026-11-02 spent 23 seconds and never had a chance.
+ */
+export function parseRetryAfterMs(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000)
+  const at = Date.parse(value)
+  if (Number.isNaN(at)) return undefined
+  return Math.max(0, at - Date.now())
+}
+
 /** A failed upstream call, with the kind the shim should re-expose. */
 export interface RaccoonUpstreamFailure {
   ok: false
   status: number
   kind: RaccoonErrorKind
   message: string
+  /** Milliseconds the upstream asked the caller to wait, when it said so. */
+  retryAfterMs?: number
 }
 
 /** A successful streaming call: the caller pipes the body through untouched. */
@@ -411,11 +430,17 @@ export class RaccoonUpstreamClient {
     }
     if (!response.ok || response.body === null) {
       const text = await RaccoonUpstreamClient.textOf(response)
+      const kind = classifyUpstreamError(response.status === 0 ? 502 : response.status, text)
+      const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
+      const hint = kind === 'soft_rate' && retryAfterMs === undefined
+        ? 'raccoon: 该模型请求频率超限；请等待后再试，或换用其他模型（如同会话重试通常不会解除限流）。'
+        : ''
       return {
         ok: false,
         status: response.status,
-        kind: classifyUpstreamError(response.status === 0 ? 502 : response.status, text),
-        message: response.body === null && response.ok ? 'raccoon: upstream returned an empty body' : text,
+        kind,
+        message: response.body === null && response.ok ? 'raccoon: upstream returned an empty body' : `${hint}${text}`,
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       }
     }
     return { ok: true, status: response.status, body: response.body, contentType: response.headers.get('content-type') ?? 'text/event-stream' }
