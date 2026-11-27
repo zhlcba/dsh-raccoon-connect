@@ -21,7 +21,7 @@ import type { RaccoonCatalogDocument } from './catalog.ts'
 import type { RaccoonRefreshOutcome } from './auth.ts'
 
 /** What went wrong upstream, in the plugin's own vocabulary. */
-export type RaccoonErrorKind = 'session_dead' | 'hard_credit' | 'soft_rate' | 'not_found' | 'server' | 'client'
+export type RaccoonErrorKind = 'session_dead' | 'hard_credit' | 'account_blocked' | 'soft_rate' | 'not_found' | 'server' | 'client'
 
 /**
  * HTTP status the local shim re-exposes each kind as.
@@ -33,6 +33,9 @@ export type RaccoonErrorKind = 'session_dead' | 'hard_credit' | 'soft_rate' | 'n
  */
 export const KIND_STATUS: Record<RaccoonErrorKind, number> = {
   hard_credit: 402,
+  // Account-level risk control is terminal: 400 makes pi-ai stop retrying.
+  // Unlike 429 (a model-scoped throttle) retrying only deepens the block.
+  account_blocked: 400,
   soft_rate: 429,
   session_dead: 401,
   not_found: 502,
@@ -46,6 +49,17 @@ const SESSION_DEAD_CODES = new Set(['200003', '200822'])
 /** Business codes and phrases meaning the account is out of credit. */
 const CREDIT_CODES = new Set(['200402', '200429', '100402'])
 const CREDIT_PHRASES = ['积分不足', '余额不足', '点数不足', 'quota exceeded', 'insufficient balance', 'insufficient points', 'payment required']
+
+/**
+ * Business codes meaning the *account* was flagged for abnormal calling.
+ * Code 200108 ("系统检测到当前账号存在异常调用，模型调用功能已暂时受限")
+ * is an account-level risk-control decision: it is NOT a model throttle and
+ * retrying the same request in the same session only makes it worse. Must be
+ * classified before the generic 429/status checks so it never enters the
+ * retryable soft_rate bucket.
+ */
+const ACCOUNT_BLOCKED_CODES = new Set(['200108'])
+const ACCOUNT_BLOCKED_PHRASES = ['账号存在异常调用', '异常调用', '模型调用功能已暂时受限']
 
 /** Business codes and phrases meaning "rate limited, try later". */
 const RATE_PHRASES = ['频繁', 'too many requests', 'rate limit']
@@ -79,6 +93,14 @@ export function classifyUpstreamError(status: number, body: string): RaccoonErro
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       const document = parsed as Record<string, unknown>
       code = codeOf(document)
+      // Some failures (e.g. code 200108) nest the business code under `error`.
+      // Read it there too, or a nested code would fall through to the status band.
+      if (code === '') {
+        const nested = document['error']
+        if (typeof nested === 'object' && nested !== null && !Array.isArray(nested)) {
+          code = codeOf(nested as Record<string, unknown>)
+        }
+      }
       message = `${messageOf(document)} ${body}`
     }
   } catch {
@@ -87,11 +109,31 @@ export function classifyUpstreamError(status: number, body: string): RaccoonErro
   const lower = message.toLowerCase()
   if (SESSION_DEAD_CODES.has(code)) return 'session_dead'
   if (CREDIT_CODES.has(code) || CREDIT_PHRASES.some(phrase => lower.includes(phrase.toLowerCase()))) return 'hard_credit'
+  // Account-level risk control outranks the HTTP 429 status: code 200108 arrives
+  // on a 429, but must never be retried as if it were a model throttle.
+  if (ACCOUNT_BLOCKED_CODES.has(code) || ACCOUNT_BLOCKED_PHRASES.some(phrase => lower.includes(phrase.toLowerCase()))) return 'account_blocked'
   if (status === 429 || RATE_PHRASES.some(phrase => lower.includes(phrase.toLowerCase()))) return 'soft_rate'
   if (status === 401 || status === 403) return 'session_dead'
   if (status === 404) return 'not_found'
   if (status === 0 || status >= 500) return 'server'
   return 'client'
+}
+
+/**
+ * Parse a `Retry-After` header value into milliseconds.
+ *
+ * When the gateway condescends to send one it is either delta-seconds or an
+ * HTTP-date. Passing it through lets the caller's retry logic wait the right
+ * amount instead of hammering the same throttled model: the burst of six
+ * retries seen on 2026-11-02 spent 23 seconds and never had a chance.
+ */
+export function parseRetryAfterMs(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000)
+  const at = Date.parse(value)
+  if (Number.isNaN(at)) return undefined
+  return Math.max(0, at - Date.now())
 }
 
 /** A failed upstream call, with the kind the shim should re-expose. */
@@ -100,6 +142,8 @@ export interface RaccoonUpstreamFailure {
   status: number
   kind: RaccoonErrorKind
   message: string
+  /** Milliseconds the upstream asked the caller to wait, when it said so. */
+  retryAfterMs?: number
 }
 
 /** A successful streaming call: the caller pipes the body through untouched. */
@@ -411,11 +455,21 @@ export class RaccoonUpstreamClient {
     }
     if (!response.ok || response.body === null) {
       const text = await RaccoonUpstreamClient.textOf(response)
+      const kind = classifyUpstreamError(response.status === 0 ? 502 : response.status, text)
+      // An account block is terminal: never surface a wait hint that could be
+      // turned into a retry loop. Only model throttles carry Retry-After.
+      const retryAfterMs = kind === 'account_blocked' ? undefined : parseRetryAfterMs(response.headers.get('retry-after'))
+      const hint = kind === 'account_blocked'
+        ? 'raccoon: 账号被临时风控，换模型或在本会话重试都无效；请等待恢复，或按客户端提示（头像 → 问题反馈）申诉。'
+        : kind === 'soft_rate' && retryAfterMs === undefined
+          ? 'raccoon: 该模型请求频率超限；请等待后再试，或换用其他模型（如同会话重试通常不会解除限流）。'
+          : ''
       return {
         ok: false,
         status: response.status,
-        kind: classifyUpstreamError(response.status === 0 ? 502 : response.status, text),
-        message: response.body === null && response.ok ? 'raccoon: upstream returned an empty body' : text,
+        kind,
+        message: response.body === null && response.ok ? 'raccoon: upstream returned an empty body' : `${hint}${text}`,
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       }
     }
     return { ok: true, status: response.status, body: response.body, contentType: response.headers.get('content-type') ?? 'text/event-stream' }

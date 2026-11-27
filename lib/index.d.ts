@@ -636,7 +636,7 @@ declare function resolveClientIdentity(): RaccoonClientIdentity;
 //#endregion
 //#region src/upstream.d.ts
 /** What went wrong upstream, in the plugin's own vocabulary. */
-type RaccoonErrorKind = 'session_dead' | 'hard_credit' | 'soft_rate' | 'not_found' | 'server' | 'client';
+type RaccoonErrorKind = 'session_dead' | 'hard_credit' | 'account_blocked' | 'soft_rate' | 'not_found' | 'server' | 'client';
 /**
  * Map an upstream failure onto a kind.
  *
@@ -650,6 +650,8 @@ interface RaccoonUpstreamFailure {
   status: number;
   kind: RaccoonErrorKind;
   message: string;
+  /** Milliseconds the upstream asked the caller to wait, when it said so. */
+  retryAfterMs?: number;
 }
 /** A successful streaming call: the caller pipes the body through untouched. */
 interface RaccoonUpstreamStream {

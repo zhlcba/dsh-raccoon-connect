@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { classifyUpstreamError, KIND_STATUS, RaccoonUpstreamClient } from '../src/upstream.ts'
+import { classifyUpstreamError, KIND_STATUS, parseRetryAfterMs, RaccoonUpstreamClient } from '../src/upstream.ts'
 import { RACCOON_PRIMARY } from '../src/variants.ts'
 import type { RaccoonClientIdentity } from '../src/client-identity.ts'
 
@@ -130,6 +130,7 @@ describe('classifyUpstreamError', () => {
   it('maps every kind back onto the HTTP status an OpenAI client already interprets right', () => {
     expect(KIND_STATUS).toEqual({
       hard_credit: 402,
+      account_blocked: 400,
       soft_rate: 429,
       session_dead: 401,
       not_found: 502,
@@ -393,5 +394,111 @@ describe('chatStream first-byte timeout', () => {
     })
     const outcome = await client.chatStream('AT', { model: 'glm', stream: true })
     expect(outcome.ok).toBe(true)
+  })
+})
+
+describe('account-level risk control (200108)', () => {
+  /**
+   * The 2026-11-27 failure: `code: 200108` on HTTP 429 with an "abnormal
+   * calling" message. It is an account-level block, NOT a model throttle, so it
+   * must never be classified as soft_rate — otherwise pi-ai retries it and
+   * deepens the block.
+   */
+  const realBody = () => JSON.stringify({
+    error: {
+      code: 200108,
+      message: '系统检测到当前账号存在异常调用，模型调用功能已暂时受限。请稍后重试；如仍未恢复，或你认为是误判，请点击左下角头像，选择「问题反馈」提交说明。',
+      type: 'rate_limit_error',
+    },
+    type: 'soft_rate',
+    code: 'soft_rate',
+  })
+
+  it('classifies the real 200108 body as account_blocked, beating the HTTP 429', () => {
+    expect(classifyUpstreamError(429, realBody())).toBe('account_blocked')
+  })
+
+  it('also recognizes a top-level 200108 code and the risk-control phrase', () => {
+    expect(classifyUpstreamError(429, JSON.stringify({ code: 200108, message: '异常调用' }))).toBe('account_blocked')
+    expect(classifyUpstreamError(400, '模型调用功能已暂时受限')).toBe('account_blocked')
+  })
+
+  it('does not misclassify an ordinary model throttle as account_blocked', () => {
+    expect(classifyUpstreamError(429, JSON.stringify({ error: { code: 'user_model_rate_limited', message: '请求频繁' } }))).toBe('soft_rate')
+  })
+
+  it('chatStream surfaces a terminal account_blocked with no retry hint', async () => {
+    nextResponse = () => new Response(realBody(), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } })
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('account_blocked')
+      expect(outcome.message).toContain('账号被临时风控')
+      expect(outcome.message).not.toContain('换用其他模型')
+      // Even though upstream sent Retry-After, an account block is terminal.
+      expect(outcome.retryAfterMs).toBeUndefined()
+    }
+  })
+})
+
+describe('parseRetryAfterMs', () => {
+  it('reads delta-seconds, which is what a throttle normally sends', () => {
+    expect(parseRetryAfterMs('30')).toBe(30_000)
+    expect(parseRetryAfterMs('0')).toBe(0)
+  })
+
+  it('reads an HTTP-date, since the header allows either form', () => {
+    const at = Date.now() + 20_000
+    const parsed = parseRetryAfterMs(new Date(at).toUTCString())
+    expect(parsed).toBeTypeOf('number')
+    expect(parsed!).toBeGreaterThan(15_000)
+    expect(parsed!).toBeLessThanOrEqual(21_000)
+  })
+
+  it('stays undefined for an absent or unparseable value', () => {
+    expect(parseRetryAfterMs(null)).toBeUndefined()
+    expect(parseRetryAfterMs('')).toBeUndefined()
+    expect(parseRetryAfterMs('soon')).toBeUndefined()
+  })
+})
+
+describe('chatStream rate-limit reporting', () => {
+  /** The 2026-11-02 failure: 6 attempts in 23 s, none of which could succeed. */
+  it('passes the gateway wait hint through so a retry is not blind', async () => {
+    nextResponse = () => new Response(
+      JSON.stringify({ error: { code: 'user_model_rate_limited', message: '您的模型请求频率超限，请稍后重试' } }),
+      { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '30' } },
+    )
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('soft_rate')
+      expect(outcome.retryAfterMs).toBe(30_000)
+    }
+  })
+
+  it('tells the caller that retrying the same model will not help when no hint came', async () => {
+    nextResponse = () => new Response(
+      JSON.stringify({ error: { code: 'user_model_rate_limited', message: '您的模型请求频率超限，请稍后重试' } }),
+      { status: 429, headers: { 'content-type': 'application/json' } },
+    )
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('soft_rate')
+      expect(outcome.retryAfterMs).toBeUndefined()
+      expect(outcome.message).toContain('换用其他模型')
+      expect(outcome.message).toContain('user_model_rate_limited')
+    }
+  })
+
+  it('does not attach the rate-limit hint to unrelated failures', async () => {
+    nextResponse = () => jsonResponse({ code: 200003, message: 'login expired' }, 400)
+    const outcome = await makeClient().chatStream('AT', { model: 'glm', stream: true })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok === false) {
+      expect(outcome.kind).toBe('session_dead')
+      expect(outcome.message).not.toContain('换用其他模型')
+    }
   })
 })
